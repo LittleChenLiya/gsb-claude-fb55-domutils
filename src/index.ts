@@ -4,4 +4,5 @@ export * from "./legacy.js";
 export * from "./manipulation.js";
 export * from "./querying.js";
 export * from "./stringify.js";
+export * from "./structure.js";
 export * from "./traversal.js";
