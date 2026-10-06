@@ -152,3 +152,60 @@ export function uniqueSort<T extends AnyNode>(nodes: T[]): T[] {
 
     return nodes;
 }
+
+/**
+ * Sort an array of nodes based on their relative position in the document,
+ * using the caller-provided root order for nodes that belong to different
+ * roots. Nodes are deduplicated by identity, and nodes that do not belong to
+ * any of the provided roots are rejected.
+ *
+ * This is a read-only operation: neither the input array nor the nodes'
+ * pointers are mutated, and a new array is returned.
+ *
+ * @category Helpers
+ * @param nodes Array of DOM nodes to sort.
+ * @param roots Array of root nodes defining the root order.
+ * @returns Collection of unique nodes, sorted by root order and document order.
+ */
+export function sortNodes<T extends AnyNode>(
+    nodes: T[],
+    roots: AnyNode[],
+): T[] {
+    // Deduplicate nodes by identity, without mutating the input.
+    const unique = [...new Set(nodes)];
+
+    // Map each root to its position in the caller-provided root order.
+    const rootIndices = new Map<AnyNode, number>(
+        roots.map((root, index) => [root, index]),
+    );
+
+    // Assign each node to the first root found when walking up its ancestors.
+    const entries = unique.map((node) => {
+        let current: AnyNode | null = node;
+        while (current !== null) {
+            const rootIndex = rootIndices.get(current);
+            if (rootIndex !== undefined) {
+                return { node, rootIndex };
+            }
+            current = current.parent;
+        }
+        throw new Error("Node is not contained in any root");
+    });
+
+    // Sort by root order, then by document order within each root.
+    entries.sort((a, b) => {
+        if (a.rootIndex !== b.rootIndex) {
+            return a.rootIndex - b.rootIndex;
+        }
+        const relative = compareDocumentPosition(a.node, b.node);
+        if (relative & DocumentPosition.PRECEDING) {
+            return -1;
+        }
+        if (relative & DocumentPosition.FOLLOWING) {
+            return 1;
+        }
+        return 0;
+    });
+
+    return entries.map((entry) => entry.node);
+}
