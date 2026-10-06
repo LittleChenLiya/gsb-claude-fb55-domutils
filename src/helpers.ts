@@ -152,3 +152,76 @@ export function uniqueSort<T extends AnyNode>(nodes: T[]): T[] {
 
     return nodes;
 }
+
+/**
+ * Read-only variant of node sorting: sort an array of nodes without modifying
+ * the input array or the node tree.
+ *
+ * Nodes are assigned to the caller-provided roots by walking their ancestor
+ * chain; nodes under the same root are ordered by ancestor and sibling order
+ * (document order, via {@link compareDocumentPosition}), while nodes under
+ * different roots follow the order of the `roots` array. Nodes are
+ * deduplicated by identity (`===`) only. Nodes that do not belong to any of
+ * the provided roots are rejected with an error.
+ *
+ * @category Helpers
+ * @param nodes Array of DOM nodes to sort. Not modified.
+ * @param roots Roots that the nodes must belong to, in the desired output
+ * order. Not modified.
+ * @returns A new array of unique nodes, sorted by root order, then document
+ * order within each root.
+ * @throws {Error} If a node does not belong to any of the provided roots.
+ */
+export function sortNodes<T extends AnyNode>(
+    nodes: readonly T[],
+    roots: readonly AnyNode[],
+): T[] {
+    // Assign each node to the first root that contains it (or is the node).
+    const rootIndexes = nodes.map((node) => {
+        for (
+            let current: AnyNode | null = node;
+            current;
+            current = current.parent
+        ) {
+            const rootIndex = roots.indexOf(current);
+            if (rootIndex !== -1) {
+                return rootIndex;
+            }
+        }
+        throw new Error(
+            "sortNodes: node does not belong to any of the provided roots",
+        );
+    });
+
+    // Deduplicate by identity, keeping the first occurrence of each node.
+    const uniqueNodes: T[] = [];
+    const uniqueRootIndexes: number[] = [];
+    for (const [index, node] of nodes.entries()) {
+        if (!uniqueNodes.includes(node)) {
+            uniqueNodes.push(node);
+            uniqueRootIndexes.push(rootIndexes[index]);
+        }
+    }
+
+    // Sort by root order first, then by document order within each root.
+    const decorated = uniqueNodes.map((node, index) => ({
+        node,
+        rootIndex: uniqueRootIndexes[index],
+    }));
+
+    decorated.sort((a, b) => {
+        if (a.rootIndex !== b.rootIndex) {
+            return a.rootIndex - b.rootIndex;
+        }
+        const relative = compareDocumentPosition(a.node, b.node);
+        if (relative & DocumentPosition.PRECEDING) {
+            return -1;
+        }
+        if (relative & DocumentPosition.FOLLOWING) {
+            return 1;
+        }
+        return 0;
+    });
+
+    return decorated.map(({ node }) => node);
+}
