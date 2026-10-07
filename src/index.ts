@@ -1,3 +1,4 @@
+export * from "./clone.js";
 export * from "./feeds.js";
 export * from "./helpers.js";
 export * from "./legacy.js";
