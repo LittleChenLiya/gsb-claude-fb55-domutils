@@ -56,6 +56,81 @@ export function getText(node: AnyNode | AnyNode[]): string {
 }
 
 /**
+ * Options for {@link extractText}.
+ *
+ * @category Stringify
+ */
+export interface ExtractTextOptions {
+    /**
+     * Names of elements whose entire subtree (the element itself and all of
+     * its descendants) is skipped. Text nodes adjacent to excluded elements
+     * are still collected.
+     *
+     * When provided, this replaces the default of `["script", "style"]`.
+     */
+    excludeTags?: readonly string[];
+    /**
+     * Whether `<br>` tags are converted to newline characters (`"\n"`).
+     *
+     * @default false
+     */
+    brToNewline?: boolean;
+}
+
+const DEFAULT_EXCLUDED_TAGS = ["script", "style"];
+
+/**
+ * Extract the text of a node, skipping configurable element subtrees.
+ *
+ * By default, `<script>` and `<style>` subtrees are skipped while adjacent
+ * text is preserved. `<br>` tags are only converted to newlines when
+ * `brToNewline` is explicitly enabled. Comments are ignored. The traversal
+ * does not modify the tree, and the behavior of {@link textContent} and
+ * {@link innerText} is unchanged.
+ *
+ * @category Stringify
+ * @param node Node to extract the text of.
+ * @param options Options for exclusion and `<br>` handling.
+ * @returns The extracted text.
+ */
+export function extractText(
+    node: AnyNode | AnyNode[],
+    options: ExtractTextOptions = {},
+): string {
+    const excludedTags = new Set(options.excludeTags ?? DEFAULT_EXCLUDED_TAGS);
+    const brToNewline = options.brToNewline ?? false;
+    const parts: string[] = [];
+    collectText(node, excludedTags, brToNewline, parts);
+    return parts.join("");
+}
+
+function collectText(
+    node: AnyNode | AnyNode[],
+    excludedTags: ReadonlySet<string>,
+    brToNewline: boolean,
+    parts: string[],
+): void {
+    if (Array.isArray(node)) {
+        for (const child of node) {
+            collectText(child, excludedTags, brToNewline, parts);
+        }
+        return;
+    }
+    if (isTag(node)) {
+        if (excludedTags.has(node.name)) return;
+        if (brToNewline && node.name === "br") {
+            parts.push("\n");
+            return;
+        }
+    }
+    if (hasChildren(node) && !isComment(node)) {
+        collectText(node.children, excludedTags, brToNewline, parts);
+        return;
+    }
+    if (isText(node)) parts.push(node.data);
+}
+
+/**
  * Get a node's text content. Ignores comments.
  *
  * @category Stringify
