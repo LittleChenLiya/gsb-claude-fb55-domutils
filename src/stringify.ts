@@ -73,6 +73,75 @@ export function textContent(node: AnyNode | AnyNode[]): string {
 }
 
 /**
+ * Tags whose subtrees are skipped by {@link extractText} by default.
+ */
+const DEFAULT_EXCLUDE_TAGS: ReadonlySet<string> = new Set(["script", "style"]);
+
+/**
+ * Options for {@link extractText}.
+ */
+export interface ExtractTextOptions {
+    /**
+     * Lowercase tag names whose subtrees are excluded from the result. Nodes
+     * adjacent to an excluded element are unaffected. Defaults to
+     * `new Set(["script", "style"])`. Pass an empty set to include all tags.
+     */
+    excludeTags?: Iterable<string>;
+    /**
+     * Whether `<br>` tags are converted into newline characters. When `false`
+     * (the default), `<br>` tags contribute nothing, matching `textContent`.
+     */
+    brToNewline?: boolean;
+}
+
+/**
+ * Extract text from `node` without modifying the tree.
+ *
+ * Like {@link textContent}, this joins all adjacent text nodes (including
+ * text next to skipped elements), and ignores comments. Subtrees rooted at
+ * any tag in `options.excludeTags` (by default `<script>` and `<style>`) are
+ * skipped. `<br>` tags are only converted into newlines when
+ * `options.brToNewline` is explicitly set to `true`.
+ *
+ * @category Stringify
+ * @param node Node (or array of nodes) to get the text of.
+ * @param options Options controlling excluded tags and `<br>` handling.
+ * @returns The extracted text.
+ */
+export function extractText(
+    node: AnyNode | AnyNode[],
+    options: ExtractTextOptions = {},
+): string {
+    const excludeTags =
+        options.excludeTags === undefined
+            ? DEFAULT_EXCLUDE_TAGS
+            : new Set(options.excludeTags);
+    const brToNewline = options.brToNewline ?? false;
+
+    function render(nodes: readonly AnyNode[]): string {
+        let result = "";
+        for (const child of nodes) {
+            if (isTag(child)) {
+                if (excludeTags.has(child.name)) continue;
+                if (child.name === "br") {
+                    if (brToNewline) result += "\n";
+                    continue;
+                }
+            }
+
+            if (hasChildren(child) && !isComment(child)) {
+                result += render(child.children);
+            } else if (isText(child)) {
+                result += child.data;
+            }
+        }
+        return result;
+    }
+
+    return Array.isArray(node) ? render(node) : render([node]);
+}
+
+/**
  * Get a node's inner text, ignoring `<script>` and `<style>` tags. Ignores comments.
  *
  * @category Stringify
